@@ -1214,15 +1214,18 @@ function startRowDrag(srcTr, srcTbody, srcCatId, startX, startY) {
     document.querySelectorAll('.category-block').forEach(b => b.style.outline = '');
 
     const els = document.elementsFromPoint(cx, cy);
-    const tgtTr = els.find(el => el.tagName === 'TR' && el.closest('tbody') && el !== srcTr);
-    if (tgtTr) {
+    // TR이 안 잡히는 브라우저 버그 대응 — TD를 찾아 부모 TR 사용
+    const tgtTd = els.find(el => el.tagName === 'TD' && el.closest('tbody'));
+    const tgtTr = tgtTd ? tgtTd.closest('tr') : null;
+
+    if (tgtTr && tgtTr !== srcTr) {
       const rect  = tgtTr.getBoundingClientRect();
       const isTop = cy < rect.top + rect.height / 2;
       tgtTr.classList.add(isTop ? 'row-drag-over-top' : 'row-drag-over-bottom');
     } else {
       const catBlock = els.find(el => el.closest && el.closest('.category-block'));
       if (catBlock) {
-        const blk = catBlock.closest ? catBlock.closest('.category-block') : catBlock;
+        const blk = catBlock.closest('.category-block');
         if (blk) blk.style.outline = '2px solid var(--accent)';
       }
     }
@@ -1249,8 +1252,9 @@ function startRowDrag(srcTr, srcTbody, srcCatId, startX, startY) {
     const cy = ev.changedTouches ? ev.changedTouches[0].clientY : ev.clientY;
     const els = document.elementsFromPoint(cx, cy);
 
-    // ── TR 위에 드롭 ──
-    const tgtTr = els.find(el => el.tagName === 'TR' && el.closest('tbody') && el !== srcTr);
+    // ── TR 위에 드롭 — TD 찾아서 부모 TR 사용 (elementsFromPoint TR 버그 대응) ──
+    const tgtTd = els.find(el => el.tagName === 'TD' && el.closest('tbody'));
+    const tgtTr = (tgtTd && tgtTd.closest('tr') !== srcTr) ? tgtTd.closest('tr') : null;
     if (tgtTr) {
       const tgtBlock  = tgtTr.closest('.category-block');
       const tgtCatId  = tgtBlock?.dataset.catId;
