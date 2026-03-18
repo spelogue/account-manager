@@ -185,6 +185,7 @@ tbody tr.row-drag-over-bottom td:first-child { box-shadow: inset 0 -3px 0 var(--
   display: flex; align-items: center; padding: 0 2px;
   touch-action: none;
 }
+.row-drag-grip * { pointer-events: none; }
 tr:hover .row-drag-grip { opacity: 0.6; }
 .row-drag-grip:hover { opacity: 1 !important; }
 .row-drag-grip:active { cursor: grabbing; }
