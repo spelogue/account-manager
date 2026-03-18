@@ -1198,6 +1198,12 @@ function startRowDrag(srcTr, srcTbody, srcCatId, startX, startY) {
   srcTr.style.opacity = '0.4';
   let moved = false;
 
+  // 드래그 중 모든 td pointer-events 비활성화 → elementsFromPoint가 TR을 정확히 찾도록
+  document.querySelectorAll('td, .copy-td, .link-cell, .svc-cell').forEach(el => {
+    el._pe = el.style.pointerEvents;
+    el.style.pointerEvents = 'none';
+  });
+
   const onMove = ev => {
     const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
     const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
@@ -1225,6 +1231,11 @@ function startRowDrag(srcTr, srcTbody, srcCatId, startX, startY) {
     document.removeEventListener('mouseup',   onUp);
     document.removeEventListener('touchmove', onMove);
     document.removeEventListener('touchend',  onUp);
+
+    // pointer-events 복원
+    document.querySelectorAll('td, .copy-td, .link-cell, .svc-cell').forEach(el => {
+      el.style.pointerEvents = el._pe || '';
+    });
 
     srcTr.style.opacity = '';
     clearAllRowIndicators();
