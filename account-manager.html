@@ -1175,21 +1175,22 @@ function initCategoryDrag() {
 let gRowDrag = null; // { srcCat, srcIdx, srcTr }
 
 function initRowDrag(tbody, cat) {
-  tbody.addEventListener('mousedown', e => {
-    const grip = e.target.closest('.row-drag-grip');
+  // 각 행의 핸들에 직접 이벤트 부착
+  [...tbody.rows].forEach(tr => {
+    const grip = tr.querySelector('.row-drag-grip');
     if (!grip) return;
-    const tr = grip.closest('tr');
-    if (!tr) return;
-    e.preventDefault();
-    startRowDrag(tr, tbody, cat.id, e.clientX, e.clientY);
+
+    grip.addEventListener('mousedown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      startRowDrag(tr, tbody, cat.id, e.clientX, e.clientY);
+    });
+
+    grip.addEventListener('touchstart', e => {
+      e.stopPropagation();
+      startRowDrag(tr, tbody, cat.id, e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
   });
-  tbody.addEventListener('touchstart', e => {
-    const grip = e.target.closest('.row-drag-grip');
-    if (!grip) return;
-    const tr = grip.closest('tr');
-    if (!tr) return;
-    startRowDrag(tr, tbody, cat.id, e.touches[0].clientX, e.touches[0].clientY);
-  }, { passive: true });
 }
 
 function startRowDrag(srcTr, srcTbody, srcCatId, startX, startY) {
