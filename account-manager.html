@@ -1,0 +1,1829 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔐 계정 관리</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<style>
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #22263a;
+  --border: #2e3248;
+  --text: #e8eaf0;
+  --text-muted: #7b82a0;
+  --accent: #5b6ef5;
+  --accent-dim: rgba(91,110,245,0.15);
+  --danger: #ef4444;
+  --success: #22c55e;
+  --radius: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Noto Sans KR', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* ── Header ── */
+header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 14px 24px; display: flex; align-items: center; gap: 10px;
+  position: sticky; top: 0; z-index: 100;
+}
+.logo { font-size: 19px; font-weight: 700; letter-spacing: -0.5px; white-space: nowrap; }
+.logo span { color: var(--accent); }
+.hdr-divider { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
+.hdr-group { display: flex; align-items: center; gap: 4px; }
+.hdr-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 11px; border-radius: 7px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border);
+  font-family: 'Noto Sans KR', sans-serif;
+  background: transparent; color: var(--text-muted); transition: all 0.14s; white-space: nowrap;
+}
+.hdr-btn:hover:not(:disabled) { background: var(--surface2); color: var(--text); border-color: var(--text-muted); }
+.hdr-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.hdr-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.hdr-btn.primary:hover:not(:disabled) { background: #4a5ce0; transform: translateY(-1px); }
+.hdr-btn svg { flex-shrink: 0; }
+.undo-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px;
+  background: var(--surface2); color: var(--text-muted); font-size: 10px; font-weight: 700;
+}
+.hdr-spacer { flex: 1; }
+
+/* ── Collapse toolbar ── */
+.collapse-toolbar {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 8px 24px; display: flex; align-items: center; gap: 8px;
+}
+.collapse-label { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 0.4px; text-transform: uppercase; margin-right: 4px; white-space: nowrap; }
+.collapse-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted);
+  font-family: 'Noto Sans KR', sans-serif; transition: all 0.14s; white-space: nowrap;
+}
+.collapse-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--text-muted); }
+.collapse-sep { width: 1px; height: 16px; background: var(--border); }
+.cat-pills { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cat-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted);
+  font-family: 'Noto Sans KR', sans-serif; transition: all 0.14s;
+}
+.cat-pill .pill-dot { width: 7px; height: 7px; border-radius: 50%; }
+.cat-pill:hover { background: var(--surface2); color: var(--text); }
+.cat-pill.open { background: var(--surface2); color: var(--text); }
+
+/* ── Layout ── */
+.container { max-width: 1080px; margin: 0 auto; padding: 24px; }
+
+/* ── Search ── */
+.search-wrap { display: flex; gap: 12px; margin-bottom: 20px; align-items: center; }
+.search-box {
+  flex: 1; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 16px;
+  display: flex; align-items: center; gap: 10px; transition: border-color 0.15s;
+}
+.search-box:focus-within { border-color: var(--accent); }
+.search-box input {
+  background: transparent; border: none; outline: none;
+  font-size: 14px; color: var(--text); width: 100%; font-family: 'Noto Sans KR', sans-serif;
+}
+.search-box input::placeholder { color: var(--text-muted); }
+
+/* ── Category block ── */
+.category-block {
+  margin-bottom: 16px; border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; transition: box-shadow 0.2s, opacity 0.2s;
+  position: relative;
+}
+.category-block:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+
+/* Category drag states */
+.category-block.cat-dragging {
+  opacity: 0.35; box-shadow: none !important;
+}
+.category-block.cat-drag-over-top::before,
+.category-block.cat-drag-over-bottom::after {
+  content: ''; display: block; position: absolute; left: 0; right: 0; height: 3px;
+  background: var(--accent); border-radius: 2px; z-index: 10; pointer-events: none;
+}
+.category-block.cat-drag-over-top::before { top: -2px; }
+.category-block.cat-drag-over-bottom::after { bottom: -2px; }
+
+.cat-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 16px; user-select: none; background: var(--surface); transition: background 0.15s;
+}
+.cat-header:hover { background: rgba(255,255,255,0.03); }
+
+/* Category drag grip — always visible, left side */
+.cat-drag-grip {
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; flex-shrink: 0;
+  cursor: grab; color: var(--text-muted); font-size: 15px; opacity: 0.45;
+  border-radius: 4px; transition: opacity 0.15s, color 0.15s;
+  touch-action: none;
+}
+.cat-drag-grip:hover { opacity: 1; color: var(--text); }
+.cat-drag-grip:active { cursor: grabbing; }
+
+.cat-color-bar { width: 4px; height: 20px; border-radius: 2px; flex-shrink: 0; }
+.cat-name-wrap { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.cat-title-input {
+  background: transparent; border: none; outline: none;
+  font-size: 14px; font-weight: 700; color: var(--text);
+  font-family: 'Noto Sans KR', sans-serif; cursor: pointer; min-width: 0;
+  border-bottom: 1px solid transparent; transition: border-color 0.15s; padding-bottom: 1px;
+}
+.cat-title-input:focus { cursor: text; border-bottom-color: var(--accent); }
+.cat-badge {
+  background: var(--surface2); color: var(--text-muted);
+  border-radius: 20px; padding: 2px 8px; font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.cat-actions { display: flex; align-items: center; gap: 4px; }
+.icon-btn {
+  width: 28px; height: 28px; border-radius: 6px; border: none; background: transparent;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); transition: all 0.15s; font-size: 14px;
+}
+.icon-btn:hover { background: var(--surface2); color: var(--text); }
+.icon-btn.danger:hover { background: rgba(239,68,68,0.1); color: var(--danger); }
+.cat-chevron { color: var(--text-muted); font-size: 11px; transition: transform 0.2s; }
+.cat-chevron.open { transform: rotate(90deg); }
+
+/* ── Table ── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; background: var(--surface); }
+thead { background: var(--surface2); border-top: 1px solid var(--border); }
+th {
+  padding: 9px 13px; font-size: 11px; font-weight: 600;
+  text-align: left; letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--text-muted); white-space: nowrap;
+}
+td { padding: 9px 13px; font-size: 13px; border-top: 1px solid var(--border); vertical-align: middle; }
+tbody tr { transition: background 0.1s; }
+tbody tr:hover td { background: rgba(255,255,255,0.02); }
+
+/* Row drag states */
+tbody tr.row-dragging td { opacity: 0.3; }
+tbody tr.row-drag-over-top td:first-child { box-shadow: inset 0 3px 0 var(--accent); }
+tbody tr.row-drag-over-bottom td:first-child { box-shadow: inset 0 -3px 0 var(--accent); }
+
+/* Row drag handle */
+.row-drag-grip {
+  cursor: grab; color: var(--text-muted); font-size: 14px;
+  opacity: 0; transition: opacity 0.15s;
+  display: flex; align-items: center; padding: 0 2px;
+  touch-action: none;
+}
+tr:hover .row-drag-grip { opacity: 0.6; }
+.row-drag-grip:hover { opacity: 1 !important; }
+.row-drag-grip:active { cursor: grabbing; }
+
+.svc-cell { display: flex; align-items: center; gap: 8px; }
+.favicon { width: 16px; height: 16px; border-radius: 3px; object-fit: contain; flex-shrink: 0; background: var(--surface2); }
+
+input.cell-input {
+  background: transparent; border: none; outline: none;
+  font-size: 13px; color: var(--text); width: 100%;
+  padding: 3px 6px; border-radius: 5px;
+  font-family: 'Noto Sans KR', sans-serif; transition: background 0.12s;
+}
+input.cell-input:focus { background: var(--surface2); }
+input.cell-input::placeholder { color: var(--text-muted); }
+input.cell-input.mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+a.site-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--accent-dim); color: var(--accent);
+  text-decoration: none; padding: 4px 10px; border-radius: 6px;
+  font-size: 12px; font-weight: 500; white-space: nowrap;
+  border: 1px solid rgba(91,110,245,0.3); transition: all 0.15s;
+  max-width: 80px; overflow: hidden; text-overflow: ellipsis;
+}
+a.site-btn:hover { background: var(--accent); color: #fff; }
+.link-cell { display: flex; align-items: center; gap: 4px; }
+.link-edit-btn {
+  width: 22px; height: 22px; border-radius: 5px; border: none;
+  background: transparent; cursor: pointer; color: transparent;
+  font-size: 13px; flex-shrink: 0; transition: all 0.15s;
+  display: flex; align-items: center; justify-content: center;
+}
+tr:hover .link-edit-btn { color: var(--text-muted); }
+.link-edit-btn:hover { background: var(--surface2); color: var(--accent) !important; }
+
+.del-row-btn {
+  width: 24px; height: 24px; border-radius: 5px; border: none; background: transparent;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: transparent; font-size: 13px; transition: all 0.15s;
+}
+tr:hover .del-row-btn { color: var(--text-muted); }
+.del-row-btn:hover { background: rgba(239,68,68,0.1); color: var(--danger) !important; }
+
+/* 복사 셀 */
+.copy-td {
+  cursor: copy; font-size: 13px; transition: background 0.15s;
+  position: relative; padding: 0 !important;
+}
+.copy-td:hover { background: rgba(91,110,245,0.08) !important; }
+.copy-td-inner {
+  display: flex; align-items: center; gap: 4px;
+  padding: 9px 13px; min-height: 38px;
+}
+.copy-indicator {
+  font-size: 11px; color: transparent; flex-shrink: 0;
+  transition: color 0.15s;
+}
+.copy-td:hover .copy-indicator { color: var(--accent); }
+.mono-text { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+/* 편집 모드 인풋 */
+.copy-td input.edit-input {
+  width: 100%; background: var(--surface2); border: 1.5px solid var(--accent);
+  border-radius: 5px; padding: 5px 8px; color: var(--text); font-size: 13px;
+  outline: none; font-family: 'Noto Sans KR', sans-serif;
+}
+.copy-td input.edit-input.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* 복사 토스트 (인라인) */
+.copy-flash {
+  position: fixed; pointer-events: none;
+  background: var(--success); color: #fff;
+  padding: 4px 10px; border-radius: 6px;
+  font-size: 11px; font-weight: 600;
+  opacity: 0; transition: opacity 0.2s;
+  z-index: 9999; white-space: nowrap;
+}
+.copy-flash.show { opacity: 1; }
+
+/* ── Add buttons ── */
+.add-row-btn {
+  width: 100%; padding: 10px; background: var(--surface); border: none; border-top: 1px dashed var(--border);
+  color: var(--text-muted); cursor: pointer; font-size: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  font-family: 'Noto Sans KR', sans-serif; transition: all 0.15s;
+}
+.add-row-btn:hover { background: var(--surface2); color: var(--accent); }
+
+/* 카테고리 간 드래그 드롭 표시 */
+tbody tr.row-drag-over-top td,
+tbody tr.row-drag-over-bottom td { position: relative; }
+tbody tr.row-drag-over-top td:first-child::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 2px; background: var(--accent); border-radius: 1px;
+}
+tbody tr.row-drag-over-bottom td:first-child::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+  height: 2px; background: var(--accent); border-radius: 1px;
+}
+.add-cat-btn {
+  width: 100%; padding: 13px; background: transparent; border: 2px dashed var(--border);
+  color: var(--text-muted); cursor: pointer; font-size: 13px; font-weight: 600;
+  border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: 'Noto Sans KR', sans-serif; transition: all 0.2s; margin-top: 4px;
+}
+.add-cat-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+/* ── Color picker ── */
+.color-popup {
+  position: fixed; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px; display: flex; gap: 7px; flex-wrap: wrap;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.5); z-index: 500; width: 180px;
+}
+.color-swatch { width: 26px; height: 26px; border-radius: 6px; cursor: pointer; border: 2px solid transparent; transition: transform 0.1s; }
+.color-swatch:hover { transform: scale(1.2); }
+.color-swatch.selected { border-color: #fff; }
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.72);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 400; backdrop-filter: blur(4px);
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.modal-overlay.show { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 26px; width: 420px; max-width: 92vw;
+  transform: translateY(18px); transition: transform 0.2s;
+}
+.modal-overlay.show .modal { transform: translateY(0); }
+.modal h2 { font-size: 16px; font-weight: 700; margin-bottom: 18px; }
+.modal-field { margin-bottom: 14px; }
+.modal-field label { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 5px; font-weight: 600; letter-spacing: 0.3px; }
+.modal-input {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 9px 13px; color: var(--text);
+  font-size: 14px; outline: none; font-family: 'Noto Sans KR', sans-serif; transition: border-color 0.15s;
+}
+.modal-input:focus { border-color: var(--accent); }
+.emoji-grid { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 5px; }
+.emoji-opt {
+  width: 34px; height: 34px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--surface2); cursor: pointer; font-size: 17px;
+  display: flex; align-items: center; justify-content: center; transition: all 0.12s;
+}
+.emoji-opt:hover, .emoji-opt.selected { background: var(--accent-dim); border-color: var(--accent); }
+.modal-colors { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 5px; }
+.modal-color-swatch { width: 30px; height: 30px; border-radius: 7px; cursor: pointer; border: 2px solid transparent; transition: all 0.12s; }
+.modal-color-swatch:hover { transform: scale(1.1); }
+.modal-color-swatch.selected { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(10px);
+  background: var(--success); color: #fff; padding: 9px 20px;
+  border-radius: 50px; font-size: 13px; font-weight: 600;
+  opacity: 0; pointer-events: none; transition: all 0.28s; white-space: nowrap; z-index: 600;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.cat-body.collapsed { display: none; }
+
+@media(max-width:640px) {
+  th:nth-child(5), td:nth-child(5), th:nth-child(6), td:nth-child(6) { display: none; }
+  header { padding: 12px 14px; gap: 6px; }
+  .collapse-toolbar { padding: 7px 14px; }
+  .container { padding: 16px 12px; }
+  .hdr-divider { display: none; }
+  .cat-pills { display: none; }
+}
+
+/* ── Lock Screen ── */
+#lockScreen {
+  position: fixed; inset: 0; z-index: 9999;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+}
+#lockScreen.hidden { display: none; }
+.lock-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+  padding: 40px 36px; width: 360px; max-width: 92vw;
+  display: flex; flex-direction: column; align-items: center;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+  animation: lockIn 0.35s cubic-bezier(.22,.9,.36,1) both;
+}
+@keyframes lockIn {
+  from { opacity:0; transform: translateY(24px) scale(0.97); }
+  to   { opacity:1; transform: translateY(0) scale(1); }
+}
+.lock-icon {
+  width: 62px; height: 62px; border-radius: 16px;
+  background: var(--accent-dim); border: 1px solid rgba(91,110,245,0.3);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 22px; font-size: 28px;
+}
+.lock-title { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 6px; }
+.lock-sub { font-size: 13px; color: var(--text-muted); margin-bottom: 28px; text-align: center; line-height: 1.5; }
+.lock-input-wrap { width: 100%; position: relative; margin-bottom: 8px; }
+.lock-input {
+  width: 100%; background: var(--surface2);
+  border: 1.5px solid var(--border); border-radius: 10px;
+  padding: 12px 44px 12px 16px; font-size: 15px; color: var(--text); outline: none;
+  font-family: 'Noto Sans KR', sans-serif; letter-spacing: 0.05em; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.lock-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,110,245,0.2); }
+.lock-input.error { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(239,68,68,0.2); animation: shake 0.35s ease; }
+@keyframes shake {
+  0%,100% { transform: translateX(0); } 20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); }
+}
+.lock-eye-btn {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; color: var(--text-muted);
+  padding: 4px; border-radius: 5px; display: flex; transition: color 0.15s;
+}
+.lock-eye-btn:hover { color: var(--text); }
+.lock-error-msg { font-size: 12px; color: var(--danger); min-height: 18px; width: 100%; margin-bottom: 12px; }
+.lock-submit-btn {
+  width: 100%; padding: 13px; background: var(--accent); color: #fff;
+  border: none; border-radius: 10px; font-size: 15px; font-weight: 700;
+  cursor: pointer; font-family: 'Noto Sans KR', sans-serif;
+  transition: all 0.15s; margin-bottom: 16px;
+}
+.lock-submit-btn:hover { background: #4a5ce0; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(91,110,245,0.4); }
+.lock-change-btn {
+  background: none; border: none; font-size: 12px; color: var(--text-muted);
+  cursor: pointer; font-family: 'Noto Sans KR', sans-serif;
+  text-decoration: underline; text-underline-offset: 3px; transition: color 0.15s;
+}
+.lock-change-btn:hover { color: var(--text); }
+
+
+/* lock badge in header */
+.lock-badge {
+  display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-muted);
+  padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border);
+  cursor: pointer; transition: all 0.14s; background: transparent;
+  font-family: 'Noto Sans KR', sans-serif;
+}
+.lock-badge:hover { background: var(--surface2); color: var(--text); }
+.lock-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+</style>
+</head>
+<body>
+
+<!-- ── Lock Screen ── -->
+<div id="lockScreen">
+  <div class="lock-card">
+    <div class="lock-icon">🔐</div>
+    <div class="lock-title">계정 관리</div>
+    <div class="lock-sub" id="lockSubText">비밀번호를 입력해 주세요</div>
+    <div class="lock-input-wrap">
+      <input class="lock-input" type="password" id="lockInput" placeholder="비밀번호"
+        autocomplete="current-password" onkeydown="if(event.key==='Enter') submitLock()">
+      <button class="lock-eye-btn" onclick="toggleLockEye()" tabindex="-1">
+        <svg id="lockEyeIcon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+        </svg>
+      </button>
+    </div>
+    <div class="lock-error-msg" id="lockError"></div>
+    <button class="lock-submit-btn" onclick="submitLock()">잠금 해제</button>
+
+    <button class="lock-change-btn" onclick="showSetPassword(false)">비밀번호 변경 / 초기 설정</button>
+  </div>
+</div>
+
+<!-- ── Set Password Modal ── -->
+<div class="modal-overlay" id="setPwModal">
+  <div class="modal">
+    <h2>🔑 비밀번호 설정</h2>
+    <div class="modal-field">
+      <label>새 비밀번호</label>
+      <input class="modal-input" type="password" id="newPw1" placeholder="새 비밀번호 입력"
+        onkeydown="if(event.key==='Enter') document.getElementById('newPw2').focus()">
+    </div>
+    <div class="modal-field">
+      <label>비밀번호 확인</label>
+      <input class="modal-input" type="password" id="newPw2" placeholder="동일한 비밀번호 재입력"
+        onkeydown="if(event.key==='Enter') confirmSetPassword()">
+    </div>
+    <div id="setPwError" style="font-size:12px;color:var(--danger);min-height:16px;margin-top:-6px;margin-bottom:6px;"></div>
+    <div class="modal-actions">
+      <button class="hdr-btn" id="setPwCancelBtn" onclick="closeSetPwModal()">취소</button>
+      <button class="hdr-btn primary" onclick="confirmSetPassword()">저장</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="logo">🔐 <span>계정</span>관리</div>
+  <div class="hdr-divider"></div>
+  <div class="hdr-group">
+    <button class="hdr-btn" id="undoBtn" onclick="undo()" disabled title="되돌리기 (Ctrl+Z)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 7h10a6 6 0 0 1 0 12H9"/><polyline points="3 7 7 3 7 11"/></svg>
+      되돌리기 <span class="undo-badge" id="undoCount">0</span>
+    </button>
+    <button class="hdr-btn" id="redoBtn" onclick="redo()" disabled title="다시 실행 (Ctrl+Y)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 7H11a6 6 0 0 0 0 12h4"/><polyline points="21 7 17 3 17 11"/></svg>
+      다시실행 <span class="undo-badge" id="redoCount">0</span>
+    </button>
+  </div>
+  <div class="hdr-spacer"></div>
+  <button class="hdr-btn" onclick="triggerImport()" title="JSON 백업 파일 불러오기">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    JSON 가져오기
+  </button>
+  <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="importData(event)">
+  <button class="hdr-btn" onclick="exportJsonData()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    JSON 내보내기
+  </button>
+  <button class="hdr-btn" onclick="exportData()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+    엑셀 내보내기
+  </button>
+  <button class="hdr-btn primary" onclick="saveData()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+    저장
+  </button>
+  <div id="syncStatus" class="lock-badge" style="cursor:default;">
+    <span class="sync-dot lock-dot" style="background:#f59e0b"></span>
+    <span class="sync-txt">연결 중…</span>
+  </div>
+  <button class="lock-badge" onclick="lockApp()" title="잠금">
+    <span class="lock-dot"></span>잠금
+  </button>
+</header>
+
+<div class="collapse-toolbar">
+  <span class="collapse-label">카테고리</span>
+  <button class="collapse-btn" onclick="expandAll()">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>
+    전체 펼치기
+  </button>
+  <button class="collapse-btn" onclick="collapseAll()">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></svg>
+    전체 접기
+  </button>
+  <div class="collapse-sep"></div>
+  <div class="cat-pills" id="catPills"></div>
+</div>
+
+<div class="container">
+  <div class="search-wrap">
+    <div class="search-box">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input type="text" id="searchInput" placeholder="서비스명으로 검색..." oninput="filterRows()">
+    </div>
+    <div id="statsLabel" style="color:var(--text-muted);font-size:12px;white-space:nowrap;"></div>
+  </div>
+  <div id="categories"></div>
+  <button class="add-cat-btn" onclick="openAddCatModal()">＋ 새 카테고리 추가</button>
+</div>
+
+<!-- Add Category Modal -->
+<div class="modal-overlay" id="catModal">
+  <div class="modal">
+    <h2 id="catModalTitle">새 카테고리 만들기</h2>
+    <div class="modal-field">
+      <label>카테고리 이름</label>
+      <input class="modal-input" id="catNameInput" placeholder="예: 게임, 구독 서비스...">
+    </div>
+    <div class="modal-field">
+      <label>이모지 선택</label>
+      <div class="emoji-grid" id="emojiGrid"></div>
+    </div>
+    <div class="modal-field">
+      <label>색상 선택</label>
+      <div class="modal-colors" id="modalColors"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="hdr-btn" onclick="closeCatModal()">취소</button>
+      <button class="hdr-btn primary" onclick="confirmAddCat()">만들기</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Modal -->
+<div class="modal-overlay" id="delModal">
+  <div class="modal">
+    <h2>카테고리 삭제</h2>
+    <p style="color:var(--text-muted);font-size:14px;line-height:1.65;margin-bottom:10px;">
+      "<span id="delCatName" style="color:var(--text);font-weight:700;"></span>" 카테고리와<br>포함된 모든 항목이 삭제됩니다.
+    </p>
+    <p style="color:var(--danger);font-size:12px;">삭제 후 되돌리기 버튼으로 복구할 수 있습니다.</p>
+    <div class="modal-actions">
+      <button class="hdr-btn" onclick="closeDelModal()">취소</button>
+      <button class="hdr-btn" style="background:rgba(239,68,68,0.12);color:var(--danger);border-color:rgba(239,68,68,0.3)" onclick="confirmDeleteCat()">삭제</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Link Edit Modal ── -->
+<div class="modal-overlay" id="linkModal">
+  <div class="modal">
+    <h2>🔗 링크 설정</h2>
+    <div class="modal-field">
+      <label>웹사이트 URL 또는 앱 경로</label>
+      <input class="modal-input" id="linkInput" placeholder="https://... 또는 앱 경로">
+    </div>
+    <div style="background:var(--surface2);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--text-muted);line-height:1.8;margin-bottom:4px;">
+      <strong style="color:var(--text);display:block;margin-bottom:6px;">💡 앱 경로 예시</strong>
+      <code style="color:var(--accent);">C:\Program Files\앱이름\앱.exe</code> — 직접 실행 경로<br>
+      <code style="color:var(--accent);">ms-excel:</code> — Microsoft Excel<br>
+      <code style="color:var(--accent);">ms-word:</code> — Microsoft Word<br>
+      <code style="color:var(--accent);">ms-powerpoint:</code> — PowerPoint<br>
+      <code style="color:var(--accent);">slack://</code> — Slack<br>
+      <code style="color:var(--accent);">notion://</code> — Notion 앱<br>
+      <code style="color:var(--accent);">spotify:</code> — Spotify<br>
+      <code style="color:var(--accent);">kakaowork://</code> — 카카오워크
+    </div>
+    <div class="modal-actions">
+      <button class="hdr-btn" onclick="closeLinkModal()">취소</button>
+      <button class="hdr-btn" style="background:rgba(239,68,68,0.12);color:var(--danger);border-color:rgba(239,68,68,0.3)" onclick="clearLink()">링크 삭제</button>
+      <button class="hdr-btn primary" onclick="confirmLink()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Import Confirm Modal ── -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal">
+    <h2>📦 데이터 가져오기</h2>
+    <p style="color:var(--text-muted);font-size:13px;line-height:1.7;margin-bottom:14px;">
+      아래 백업 파일을 불러옵니다.<br>
+      <strong style="color:var(--text)">현재 데이터는 모두 덮어쓰여집니다.</strong>
+    </p>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:14px 16px;margin-bottom:18px;">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px;">파일명</div>
+      <div id="importFileName" style="font-size:13px;font-weight:600;word-break:break-all;"></div>
+      <div style="display:flex;gap:16px;margin-top:10px;">
+        <span id="importCatCount" style="font-size:12px;color:var(--accent);"></span>
+        <span id="importItemCount" style="font-size:12px;color:var(--text-muted);"></span>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="hdr-btn" onclick="closeImportModal()">취소</button>
+      <button class="hdr-btn primary" onclick="confirmImport()">가져오기</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════
+//  Constants
+// ══════════════════════════════════════
+const PALETTE = ['#5b6ef5','#22c55e','#f59e0b','#ef4444','#06b6d4','#a855f7','#ec4899','#84cc16','#f97316','#14b8a6','#6366f1','#78716c'];
+const EMOJIS  = ['📱','💼','🛒','🏦','🎮','🎬','📚','🏋️','✈️','🍔','🎵','🏠','💊','🐾','📌','⭐','🔧','🎨'];
+const MAX_HISTORY = 60;
+
+const defaultData = [
+  { id:'sns',  name:'📱 SNS / 소셜미디어', color:'#5b6ef5', open:true, rows:[
+    {name:'Instagram',   url:'https://www.instagram.com',   id_:'',pw:'',memo:''},
+    {name:'Twitter / X', url:'https://www.twitter.com',     id_:'',pw:'',memo:''},
+    {name:'Facebook',    url:'https://www.facebook.com',    id_:'',pw:'',memo:''},
+    {name:'YouTube',     url:'https://www.youtube.com',     id_:'',pw:'',memo:''},
+    {name:'TikTok',      url:'https://www.tiktok.com',      id_:'',pw:'',memo:''},
+    {name:'LinkedIn',    url:'https://www.linkedin.com',    id_:'',pw:'',memo:''},
+  ]},
+  { id:'work', name:'💼 업무 / 생산성', color:'#22c55e', open:true, rows:[
+    {name:'Gmail',        url:'https://mail.google.com',    id_:'',pw:'',memo:''},
+    {name:'Notion',       url:'https://www.notion.so',      id_:'',pw:'',memo:''},
+    {name:'Slack',        url:'https://slack.com',           id_:'',pw:'',memo:''},
+    {name:'GitHub',       url:'https://github.com',          id_:'',pw:'',memo:''},
+    {name:'Google Drive', url:'https://drive.google.com',   id_:'',pw:'',memo:''},
+    {name:'Zoom',         url:'https://zoom.us',             id_:'',pw:'',memo:''},
+  ]},
+  { id:'shop', name:'🛒 쇼핑 / 이커머스', color:'#f59e0b', open:true, rows:[
+    {name:'쿠팡',        url:'https://www.coupang.com',      id_:'',pw:'',memo:''},
+    {name:'네이버 쇼핑', url:'https://shopping.naver.com',   id_:'',pw:'',memo:''},
+    {name:'Gmarket',     url:'https://www.gmarket.co.kr',   id_:'',pw:'',memo:''},
+    {name:'Amazon',      url:'https://www.amazon.com',      id_:'',pw:'',memo:''},
+    {name:'11번가',      url:'https://www.11st.co.kr',      id_:'',pw:'',memo:''},
+  ]},
+  { id:'bank', name:'🏦 금융 / 뱅킹', color:'#a855f7', open:true, rows:[
+    {name:'KB국민은행',  url:'https://www.kbstar.com',       id_:'',pw:'',memo:''},
+    {name:'신한은행',    url:'https://www.shinhan.com',      id_:'',pw:'',memo:''},
+    {name:'카카오뱅크',  url:'https://www.kakaobank.com',    id_:'',pw:'',memo:''},
+    {name:'토스',        url:'https://www.toss.im',          id_:'',pw:'',memo:''},
+    {name:'홈택스',      url:'https://www.hometax.go.kr',   id_:'',pw:'',memo:''},
+  ]},
+  { id:'etc', name:'📌 기타', color:'#78716c', open:true, rows:[] },
+];
+
+// ══════════════════════════════════════
+//  Firebase 초기화
+// ══════════════════════════════════════
+const FB_CONFIG = {
+  apiKey: "AIzaSyAD-z2ld52YHJqBup2aZcCzw_HwnERwGEY",
+  authDomain: "id-base-7b327.firebaseapp.com",
+  projectId: "id-base-7b327",
+  storageBucket: "id-base-7b327.firebasestorage.app",
+  messagingSenderId: "860044689203",
+  appId: "1:860044689203:web:ddc740ce81d28e06370846"
+};
+firebase.initializeApp(FB_CONFIG);
+const db   = firebase.firestore();
+const auth = firebase.auth();
+
+// 앱 비밀번호 해시를 Firebase 익명 로그인 후 문서 ID로 사용
+// 모든 기기에서 같은 비밀번호 → 같은 문서 ID → 자동 동기화
+let fbUid = null;
+let pwHash = null;  // 비밀번호 해시 (문서 ID로 사용)
+let fbSynced = false;
+const DOC = () => db.collection('shared').doc(pwHash);
+
+function setSyncStatus(status) {
+  // status: 'syncing' | 'saved' | 'offline' | 'error'
+  const el = document.getElementById('syncStatus');
+  if (!el) return;
+  const map = {
+    syncing: { dot: '#f59e0b', text: '동기화 중…' },
+    saved:   { dot: '#22c55e', text: '동기화 완료' },
+    offline: { dot: '#7b82a0', text: '오프라인' },
+    error:   { dot: '#ef4444', text: '동기화 오류' },
+  };
+  const s = map[status] || map.offline;
+  el.querySelector('.sync-dot').style.background = s.dot;
+  el.querySelector('.sync-txt').textContent = s.text;
+}
+
+// ══════════════════════════════════════
+//  State
+// ══════════════════════════════════════
+let data = [];
+let history = [], future = [];
+
+// 로컬 캐시로 일단 로드 (Firebase 응답 전 빠른 렌더)
+try {
+  const saved = localStorage.getItem('acct_v4');
+  data = saved ? JSON.parse(saved) : JSON.parse(JSON.stringify(defaultData));
+} catch { data = JSON.parse(JSON.stringify(defaultData)); }
+
+pushHistory(false);
+
+let pendingDeleteId = null;
+let selectedEmoji = '📌';
+let selectedColor = PALETTE[0];
+
+// ══════════════════════════════════════
+//  Helpers
+// ══════════════════════════════════════
+function uid()  { return Math.random().toString(36).slice(2,8); }
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+function getDomain(url) { try { return new URL(url).hostname; } catch { return ''; } }
+
+// ══════════════════════════════════════
+//  History
+// ══════════════════════════════════════
+function pushHistory(clearFuture = true) {
+  history.push(JSON.stringify(data));
+  if (history.length > MAX_HISTORY) history.shift();
+  if (clearFuture) future = [];
+  updateUndoButtons();
+}
+function mutate(fn) { fn(); pushHistory(); render(); scheduleFbSave(); }
+
+// Debounced auto-save to Firebase (1.5s after last change)
+let fbSaveTimer = null;
+function scheduleFbSave() {
+  if (!fbUid) return;
+  setSyncStatus('syncing');
+  clearTimeout(fbSaveTimer);
+  fbSaveTimer = setTimeout(() => saveData(), 1500);
+}
+
+function undo() {
+  if (history.length <= 1) return;
+  future.push(history.pop());
+  data = JSON.parse(history[history.length - 1]);
+  updateUndoButtons(); render(); showToast('되돌리기 완료 ↩');
+}
+function redo() {
+  if (!future.length) return;
+  const next = future.pop();
+  history.push(next);
+  data = JSON.parse(next);
+  updateUndoButtons(); render(); showToast('다시 실행 ↪');
+}
+function updateUndoButtons() {
+  document.getElementById('undoBtn').disabled = history.length <= 1;
+  document.getElementById('redoBtn').disabled = !future.length;
+  document.getElementById('undoCount').textContent = Math.max(0, history.length - 1);
+  document.getElementById('redoCount').textContent = future.length;
+}
+
+// ══════════════════════════════════════
+//  Collapse helpers
+// ══════════════════════════════════════
+function expandAll()  { data.forEach(c => c.open = true);  render(); }
+function collapseAll(){ data.forEach(c => c.open = false); render(); }
+function toggleCat(catId) {
+  const c = data.find(x => x.id === catId);
+  if (!c) return;
+  c.open = !c.open;
+  const pill  = document.querySelector(`.cat-pill[data-cat="${catId}"]`);
+  const block = document.querySelector(`.category-block[data-cat-id="${catId}"]`);
+  if (pill)  pill.classList.toggle('open', c.open);
+  if (block) {
+    block.querySelector('.cat-body').classList.toggle('collapsed', !c.open);
+    block.querySelector('.cat-chevron').classList.toggle('open', c.open);
+  }
+}
+
+// ══════════════════════════════════════
+//  Render
+// ══════════════════════════════════════
+function render() {
+  renderCategories();
+  renderPills();
+  updateStats();
+}
+
+function renderPills() {
+  const wrap = document.getElementById('catPills');
+  wrap.innerHTML = '';
+  data.forEach(cat => {
+    const pill = document.createElement('button');
+    pill.className = 'cat-pill' + (cat.open ? ' open' : '');
+    pill.dataset.cat = cat.id;
+    pill.innerHTML = `<span class="pill-dot" style="background:${cat.color}"></span>${cat.name}`;
+    pill.onclick = () => toggleCat(cat.id);
+    wrap.appendChild(pill);
+  });
+}
+
+function renderCategories() {
+  const container = document.getElementById('categories');
+  container.innerHTML = '';
+  data.forEach(cat => container.appendChild(buildCategoryBlock(cat)));
+  initCategoryDrag();
+}
+
+function buildCategoryBlock(cat) {
+  const block = document.createElement('div');
+  block.className = 'category-block';
+  block.dataset.catId = cat.id;
+
+  // Header
+  const hdr = document.createElement('div');
+  hdr.className = 'cat-header';
+
+  // ❶ Drag grip (left-most)
+  const grip = document.createElement('div');
+  grip.className = 'cat-drag-grip';
+  grip.title = '드래그해서 순서 변경';
+  grip.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+    <rect x="2" y="2" width="2" height="2" rx="1"/><rect x="6" y="2" width="2" height="2" rx="1"/><rect x="10" y="2" width="2" height="2" rx="1"/>
+    <rect x="2" y="6" width="2" height="2" rx="1"/><rect x="6" y="6" width="2" height="2" rx="1"/><rect x="10" y="6" width="2" height="2" rx="1"/>
+    <rect x="2" y="10" width="2" height="2" rx="1"/><rect x="6" y="10" width="2" height="2" rx="1"/><rect x="10" y="10" width="2" height="2" rx="1"/>
+  </svg>`;
+  grip.addEventListener('mousedown', e => e.stopPropagation());
+
+  const colorBar = document.createElement('div');
+  colorBar.className = 'cat-color-bar';
+  colorBar.style.background = cat.color;
+
+  const titleInput = document.createElement('input');
+  titleInput.className = 'cat-title-input';
+  titleInput.value = cat.name;
+  titleInput.title = '클릭해서 이름 편집';
+  titleInput.onclick  = e => e.stopPropagation();
+  titleInput.onchange = e => mutate(() => { cat.name = e.target.value; });
+  titleInput.onkeydown = e => { if (e.key === 'Enter') e.target.blur(); };
+
+  const badge = document.createElement('span');
+  badge.className = 'cat-badge';
+  badge.textContent = cat.rows.length + '개';
+
+  const nameWrap = document.createElement('div');
+  nameWrap.className = 'cat-name-wrap';
+  nameWrap.appendChild(titleInput);
+  nameWrap.appendChild(badge);
+
+  const colorBtn = document.createElement('button');
+  colorBtn.className = 'icon-btn';
+  colorBtn.title = '색상 변경';
+  colorBtn.innerHTML = `<span style="display:inline-block;width:13px;height:13px;border-radius:50%;background:${cat.color}"></span>`;
+  colorBtn.onclick = e => { e.stopPropagation(); openColorPicker(e, cat, colorBtn, block); };
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'icon-btn danger';
+  delBtn.title = '카테고리 삭제';
+  delBtn.innerHTML = '🗑';
+  delBtn.onclick = e => { e.stopPropagation(); openDelModal(cat.id, cat.name); };
+
+  const chevron = document.createElement('span');
+  chevron.className = 'cat-chevron' + (cat.open ? ' open' : '');
+  chevron.innerHTML = '▶';
+
+  const actions = document.createElement('div');
+  actions.className = 'cat-actions';
+  actions.appendChild(colorBtn);
+  actions.appendChild(delBtn);
+
+  hdr.appendChild(grip);
+  hdr.appendChild(colorBar);
+  hdr.appendChild(nameWrap);
+  hdr.appendChild(actions);
+  hdr.appendChild(chevron);
+
+  hdr.onclick = () => {
+    cat.open = !cat.open;
+    body.classList.toggle('collapsed', !cat.open);
+    chevron.classList.toggle('open', cat.open);
+    const pill = document.querySelector(`.cat-pill[data-cat="${cat.id}"]`);
+    if (pill) pill.classList.toggle('open', cat.open);
+  };
+
+  // Body
+  const body = document.createElement('div');
+  body.className = 'cat-body' + (cat.open ? '' : ' collapsed');
+
+  const tableWrap = document.createElement('div');
+  tableWrap.className = 'table-wrap';
+  const table = document.createElement('table');
+  table.innerHTML = `<thead><tr>
+    <th style="width:28px;padding:9px 4px 9px 13px;"></th>
+    <th style="width:20%">서비스명</th>
+    <th style="width:14%">링크</th>
+    <th style="width:24%">아이디 / 이메일</th>
+    <th style="width:17%">비밀번호 힌트</th>
+    <th style="width:21%">메모</th>
+    <th style="width:32px"></th>
+  </tr></thead>`;
+
+  const tbody = document.createElement('tbody');
+  cat.rows.forEach((row, ri) => tbody.appendChild(makeRow(cat, ri, row)));
+  table.appendChild(tbody);
+  tableWrap.appendChild(table);
+
+  // Row drag for this tbody
+  initRowDrag(tbody, cat);
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'add-row-btn';
+  addBtn.innerHTML = '＋ 항목 추가';
+  addBtn.onclick = () => {
+    mutate(() => cat.rows.push({name:'', url:'', id_:'', pw:'', memo:''}));
+    setTimeout(() => {
+      const rows = block.querySelectorAll('tbody tr');
+      const last = rows[rows.length - 1];
+      if (last) last.querySelector('input')?.focus();
+    }, 50);
+  };
+
+  body.appendChild(tableWrap);
+  body.appendChild(addBtn);
+  block.appendChild(hdr);
+  block.appendChild(body);
+  return block;
+}
+
+function makeRow(cat, ri, row) {
+  const tr = document.createElement('tr');
+  tr.dataset.search  = (row.name + ' ' + row.id_ + ' ' + row.memo).toLowerCase();
+  tr.dataset.catId   = cat.id;
+  tr.dataset.ri      = ri;
+  const domain = getDomain(row.url);
+
+  tr.innerHTML = `
+    <td style="padding:9px 4px 9px 13px;">
+      <div class="row-drag-grip" title="드래그해서 순서 변경">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor">
+          <rect x="2" y="3" width="2" height="2" rx="1"/><rect x="6" y="3" width="2" height="2" rx="1"/>
+          <rect x="2" y="6" width="2" height="2" rx="1"/><rect x="6" y="6" width="2" height="2" rx="1"/>
+          <rect x="2" y="9" width="2" height="2" rx="1"/><rect x="6" y="9" width="2" height="2" rx="1"/>
+        </svg>
+      </div>
+    </td>
+    <td>
+      <div class="svc-cell">
+        ${domain ? `<img class="favicon" src="https://www.google.com/s2/favicons?sz=32&domain=${domain}" onerror="this.style.display='none'">` : ''}
+        <input class="cell-input" value="${esc(row.name)}" placeholder="서비스명"
+          data-cat="${cat.id}" data-ri="${ri}" data-field="name">
+      </div>
+    </td>
+    <td>
+      <div class="link-cell">
+        ${row.url
+          ? `<a class="site-btn" href="${esc(row.url)}" target="_blank" title="${esc(row.url)}">🔗 열기</a>
+             <button class="link-edit-btn" data-cat="${cat.id}" data-ri="${ri}" title="링크 수정">✎</button>`
+          : `<input class="cell-input mono link-url-input" value="" placeholder="https:// 또는 앱 경로..."
+              data-cat="${cat.id}" data-ri="${ri}" data-field="url" style="color:#5b6ef5">`
+        }
+      </div>
+    </td>
+    <td class="copy-td" data-val="${esc(row.id_)}" data-cat="${cat.id}" data-ri="${ri}" data-field="id_">
+      <div class="copy-td-inner">
+        <span class="copy-text-val mono-text">${esc(row.id_) || '<span style=\"color:var(--text-muted)\">이메일 또는 아이디</span>'}</span>
+        ${row.id_ ? '<span class="copy-indicator" title="클릭:복사 / 더블클릭:수정">⎘</span>' : ''}
+      </div>
+    </td>
+    <td class="copy-td" data-val="${esc(row.pw)}" data-cat="${cat.id}" data-ri="${ri}" data-field="pw">
+      <div class="copy-td-inner">
+        <span class="copy-text-val">${esc(row.pw) || '<span style=\"color:var(--text-muted)\">힌트 (예: 학교+생일)</span>'}</span>
+        ${row.pw ? '<span class="copy-indicator" title="클릭:복사 / 더블클릭:수정">⎘</span>' : ''}
+      </div>
+    </td>
+    <td class="copy-td" data-val="${esc(row.memo)}" data-cat="${cat.id}" data-ri="${ri}" data-field="memo">
+      <div class="copy-td-inner">
+        <span class="copy-text-val">${esc(row.memo) || '<span style=\"color:var(--text-muted)\">메모</span>'}</span>
+        ${row.memo ? '<span class="copy-indicator" title="클릭:복사 / 더블클릭:수정">⎘</span>' : ''}
+      </div>
+    </td>
+    <td><button class="del-row-btn" data-cat="${cat.id}" data-ri="${ri}" title="행 삭제">✕</button></td>
+  `;
+
+  // 복사 td: 단일클릭=복사, 더블클릭=편집
+  tr.querySelectorAll('.copy-td').forEach(td => {
+    let clickTimer = null;
+
+    td.addEventListener('click', e => {
+      if (td.querySelector('input.edit-input')) return; // 편집중이면 무시
+      clearTimeout(clickTimer);
+      clickTimer = setTimeout(() => {
+        // 단일클릭 → 복사
+        const val = td.dataset.val;
+        if (!val) {
+          // 비어있으면 바로 편집 모드
+          startEdit(td, cat, ri);
+          return;
+        }
+        navigator.clipboard.writeText(val).then(() => {
+          showCopyFlash(e.clientX, e.clientY, '✓ 복사됨');
+          td.style.background = 'rgba(34,197,94,0.15)';
+          setTimeout(() => td.style.background = '', 1000);
+        }).catch(() => {
+          const ta = document.createElement('textarea');
+          ta.value = val; ta.style.cssText = 'position:fixed;opacity:0';
+          document.body.appendChild(ta); ta.select();
+          document.execCommand('copy'); document.body.removeChild(ta);
+          showCopyFlash(e.clientX, e.clientY, '✓ 복사됨');
+        });
+      }, 220);
+    });
+
+    td.addEventListener('dblclick', e => {
+      clearTimeout(clickTimer);
+      startEdit(td, cat, ri);
+    });
+  });
+
+  tr.querySelectorAll('input.cell-input').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const c = data.find(x => x.id === e.target.dataset.cat);
+      if (!c) return;
+      const r = c.rows[+e.target.dataset.ri];
+      if (!r) return;
+      mutate(() => { r[e.target.dataset.field] = e.target.value; });
+    });
+  });
+
+  tr.querySelector('.del-row-btn').addEventListener('click', e => {
+    const c = data.find(x => x.id === e.target.dataset.cat);
+    if (!c) return;
+    mutate(() => c.rows.splice(+e.target.dataset.ri, 1));
+  });
+
+
+
+  // 링크 수정 버튼
+  const linkEditBtn = tr.querySelector('.link-edit-btn');
+  if (linkEditBtn) {
+    linkEditBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      openLinkModal(cat.id, ri, row.url);
+    });
+  }
+
+  return tr;
+}
+
+function updateStats() {
+  let items = 0;
+  data.forEach(c => items += c.rows.length);
+  document.getElementById('statsLabel').textContent = `${data.length}개 카테고리 · ${items}개 항목`;
+}
+
+function filterRows() {
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  document.querySelectorAll('tbody tr').forEach(tr => {
+    tr.style.display = (!q || (tr.dataset.search||'').includes(q)) ? '' : 'none';
+  });
+}
+
+// ══════════════════════════════════════
+//  ── Drag & Drop: Categories ──
+// ══════════════════════════════════════
+function initCategoryDrag() {
+  const container = document.getElementById('categories');
+  const blocks    = [...container.querySelectorAll('.category-block')];
+
+  let dragSrc = null;    // DOM element being dragged
+  let dragCatId = null;
+
+  blocks.forEach(block => {
+    const grip = block.querySelector('.cat-drag-grip');
+
+    grip.addEventListener('mousedown', e => {
+      e.preventDefault();
+      startCatDrag(block, e);
+    });
+    grip.addEventListener('touchstart', e => {
+      startCatDrag(block, e.touches[0]);
+    }, { passive: true });
+  });
+
+  function startCatDrag(block, e) {
+    dragSrc   = block;
+    dragCatId = block.dataset.catId;
+    block.classList.add('cat-dragging');
+
+    const onMove = ev => {
+      const clientY = ev.touches ? ev.touches[0].clientY : ev.clientY;
+      clearDropIndicators();
+
+      // find target block under cursor
+      const els = document.elementsFromPoint(
+        ev.touches ? ev.touches[0].clientX : ev.clientX,
+        clientY
+      );
+      const target = els.find(el => el.classList.contains('category-block') && el !== dragSrc);
+      if (!target) return;
+
+      const rect   = target.getBoundingClientRect();
+      const isTop  = clientY < rect.top + rect.height / 2;
+      target.classList.add(isTop ? 'cat-drag-over-top' : 'cat-drag-over-bottom');
+    };
+
+    const onUp = ev => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup',   onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend',  onUp);
+
+      if (dragSrc) dragSrc.classList.remove('cat-dragging');
+
+      const clientY = ev.changedTouches ? ev.changedTouches[0].clientY : ev.clientY;
+      const clientX = ev.changedTouches ? ev.changedTouches[0].clientX : ev.clientX;
+      const els     = document.elementsFromPoint(clientX, clientY);
+      const target  = els.find(el => el.classList.contains('category-block') && el !== dragSrc);
+
+      clearDropIndicators();
+
+      if (target) {
+        const srcIdx = data.findIndex(c => c.id === dragCatId);
+        const tgtIdx = data.findIndex(c => c.id === target.dataset.catId);
+        if (srcIdx !== -1 && tgtIdx !== -1 && srcIdx !== tgtIdx) {
+          const rect  = target.getBoundingClientRect();
+          const isTop = clientY < rect.top + rect.height / 2;
+          const newIdx = isTop ? tgtIdx : tgtIdx + 1;
+          mutate(() => {
+            const [item] = data.splice(srcIdx, 1);
+            const adjusted = newIdx > srcIdx ? newIdx - 1 : newIdx;
+            data.splice(adjusted, 0, item);
+          });
+        }
+      }
+
+      dragSrc = null; dragCatId = null;
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup',   onUp);
+    document.addEventListener('touchmove', onMove, { passive: true });
+    document.addEventListener('touchend',  onUp);
+  }
+
+  function clearDropIndicators() {
+    document.querySelectorAll('.cat-drag-over-top, .cat-drag-over-bottom').forEach(el => {
+      el.classList.remove('cat-drag-over-top', 'cat-drag-over-bottom');
+    });
+  }
+}
+
+// ══════════════════════════════════════
+//  ── Drag & Drop: Rows ──
+// ══════════════════════════════════════
+// ── 전역 행 드래그 상태 ──
+let gRowDrag = null; // { srcCat, srcIdx, srcTr }
+
+function initRowDrag(tbody, cat) {
+  tbody.addEventListener('mousedown', e => {
+    const grip = e.target.closest('.row-drag-grip');
+    if (!grip) return;
+    const tr = grip.closest('tr');
+    if (!tr) return;
+    e.preventDefault();
+    startRowDrag(tr, tbody, cat.id, e.clientX, e.clientY);
+  });
+  tbody.addEventListener('touchstart', e => {
+    const grip = e.target.closest('.row-drag-grip');
+    if (!grip) return;
+    const tr = grip.closest('tr');
+    if (!tr) return;
+    startRowDrag(tr, tbody, cat.id, e.touches[0].clientX, e.touches[0].clientY);
+  }, { passive: true });
+}
+
+function startRowDrag(srcTr, srcTbody, srcCatId, startX, startY) {
+  // catId로 항상 최신 data 배열에서 참조 — 복사 버그 방지
+  const getSrcCat = () => data.find(c => c.id === srcCatId);
+  const srcIdx = [...srcTbody.rows].indexOf(srcTr);
+  srcTr.style.opacity = '0.4';
+  let moved = false;
+
+  const onMove = ev => {
+    const cx = ev.touches ? ev.touches[0].clientX : ev.clientX;
+    const cy = ev.touches ? ev.touches[0].clientY : ev.clientY;
+    moved = true;
+    clearAllRowIndicators();
+    document.querySelectorAll('.category-block').forEach(b => b.style.outline = '');
+
+    const els = document.elementsFromPoint(cx, cy);
+    const tgtTr = els.find(el => el.tagName === 'TR' && el.closest('tbody') && el !== srcTr);
+    if (tgtTr) {
+      const rect  = tgtTr.getBoundingClientRect();
+      const isTop = cy < rect.top + rect.height / 2;
+      tgtTr.classList.add(isTop ? 'row-drag-over-top' : 'row-drag-over-bottom');
+    } else {
+      const catBlock = els.find(el => el.closest && el.closest('.category-block'));
+      if (catBlock) {
+        const blk = catBlock.closest ? catBlock.closest('.category-block') : catBlock;
+        if (blk) blk.style.outline = '2px solid var(--accent)';
+      }
+    }
+  };
+
+  const onUp = ev => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup',   onUp);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend',  onUp);
+
+    srcTr.style.opacity = '';
+    clearAllRowIndicators();
+    document.querySelectorAll('.category-block').forEach(b => b.style.outline = '');
+
+    if (!moved) { gRowDrag = null; return; }
+
+    const cx = ev.changedTouches ? ev.changedTouches[0].clientX : ev.clientX;
+    const cy = ev.changedTouches ? ev.changedTouches[0].clientY : ev.clientY;
+    const els = document.elementsFromPoint(cx, cy);
+
+    // ── TR 위에 드롭 ──
+    const tgtTr = els.find(el => el.tagName === 'TR' && el.closest('tbody') && el !== srcTr);
+    if (tgtTr) {
+      const tgtBlock  = tgtTr.closest('.category-block');
+      const tgtCatId  = tgtBlock?.dataset.catId;
+      const tgtIdx    = [...tgtTr.closest('tbody').rows].indexOf(tgtTr);
+      const rect      = tgtTr.getBoundingClientRect();
+      const isTop     = cy < rect.top + rect.height / 2;
+      const insertAt  = isTop ? tgtIdx : tgtIdx + 1;
+
+      mutate(() => {
+        const sc = getSrcCat();
+        const tc = data.find(c => c.id === tgtCatId);
+        if (!sc || !tc) return;
+        const [item] = sc.rows.splice(srcIdx, 1);
+        if (tc.id === sc.id) {
+          // 같은 카테고리 내 순서 변경
+          const adj = insertAt > srcIdx ? insertAt - 1 : insertAt;
+          sc.rows.splice(adj, 0, item);
+        } else {
+          // 다른 카테고리로 이동
+          tc.rows.splice(insertAt, 0, item);
+        }
+      });
+      gRowDrag = null; return;
+    }
+
+    // ── 카테고리 블록 위에 드롭 (빈 영역) ──
+    const anyEl  = els.find(el => el.closest && el.closest('.category-block'));
+    const blk    = anyEl?.closest('.category-block');
+    const tgtCatId = blk?.dataset.catId;
+    if (tgtCatId && tgtCatId !== srcCatId) {
+      mutate(() => {
+        const sc = getSrcCat();
+        const tc = data.find(c => c.id === tgtCatId);
+        if (!sc || !tc) return;
+        const [item] = sc.rows.splice(srcIdx, 1);
+        tc.rows.push(item);
+      });
+    }
+
+    gRowDrag = null;
+  };
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup',   onUp);
+  document.addEventListener('touchmove', onMove, { passive: true });
+  document.addEventListener('touchend',  onUp);
+}
+
+function clearAllRowIndicators() {
+  document.querySelectorAll('tbody tr').forEach(r =>
+    r.classList.remove('row-drag-over-top', 'row-drag-over-bottom'));
+}
+
+// ══════════════════════════════════════
+//  Link Modal
+// ══════════════════════════════════════
+let linkCatId = null, linkRi = null;
+
+function openLinkModal(catId, ri, currentUrl) {
+  linkCatId = catId; linkRi = ri;
+  document.getElementById('linkInput').value = currentUrl || '';
+  document.getElementById('linkModal').classList.add('show');
+  setTimeout(() => document.getElementById('linkInput').focus(), 100);
+}
+function closeLinkModal() {
+  document.getElementById('linkModal').classList.remove('show');
+  linkCatId = null; linkRi = null;
+}
+function confirmLink() {
+  const url = document.getElementById('linkInput').value.trim();
+  const c = data.find(x => x.id === linkCatId);
+  if (!c) return;
+  mutate(() => { c.rows[linkRi].url = url; });
+  closeLinkModal();
+}
+function clearLink() {
+  const c = data.find(x => x.id === linkCatId);
+  if (!c) return;
+  mutate(() => { c.rows[linkRi].url = ''; });
+  closeLinkModal();
+}
+
+// ══════════════════════════════════════
+//  Copy Cell Edit Mode
+// ══════════════════════════════════════
+function startEdit(td, cat, ri) {
+  if (td.querySelector('input.edit-input')) return;
+  const field = td.dataset.field;
+  const currentVal = td.dataset.val || '';
+  const inner = td.querySelector('.copy-td-inner');
+
+  // 인풋으로 교체
+  const inp = document.createElement('input');
+  inp.className = 'edit-input' + (field === 'id_' ? ' mono' : '');
+  inp.value = currentVal;
+  inp.placeholder = field === 'id_' ? '이메일 또는 아이디' : field === 'pw' ? '힌트' : '메모';
+  inner.innerHTML = '';
+  inner.appendChild(inp);
+  td.style.cursor = 'text';
+  inp.focus(); inp.select();
+
+  const saveEdit = () => {
+    const newVal = inp.value.trim();
+    const c = data.find(x => x.id === td.dataset.cat);
+    if (c && c.rows[ri] !== undefined) {
+      mutate(() => { c.rows[ri][field] = newVal; });
+    }
+  };
+
+  inp.addEventListener('blur', saveEdit);
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { inp.blur(); }
+    if (e.key === 'Escape') { inner.innerHTML = ''; mutate(() => {}); }
+  });
+}
+
+// ══════════════════════════════════════
+//  Color Picker
+// ══════════════════════════════════════
+let activeColorPicker = null;
+function openColorPicker(e, cat, btn, block) {
+  if (activeColorPicker) { activeColorPicker.remove(); activeColorPicker = null; return; }
+  const popup = document.createElement('div');
+  popup.className = 'color-popup';
+  PALETTE.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'color-swatch' + (cat.color === c ? ' selected' : '');
+    sw.style.background = c;
+    sw.onclick = () => { mutate(() => { cat.color = c; }); popup.remove(); activeColorPicker = null; };
+    popup.appendChild(sw);
+  });
+  const rect = btn.getBoundingClientRect();
+  popup.style.top  = (rect.bottom + 6) + 'px';
+  popup.style.left = Math.min(rect.left, window.innerWidth - 196) + 'px';
+  document.body.appendChild(popup);
+  activeColorPicker = popup;
+  const close = ev => {
+    if (!popup.contains(ev.target) && ev.target !== btn) {
+      popup.remove(); activeColorPicker = null;
+      document.removeEventListener('click', close);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', close), 10);
+}
+
+// ══════════════════════════════════════
+//  Add Category Modal
+// ══════════════════════════════════════
+function openAddCatModal() {
+  selectedEmoji = '📌'; selectedColor = PALETTE[0];
+  document.getElementById('catNameInput').value = '';
+  buildModalUI();
+  document.getElementById('catModal').classList.add('show');
+  setTimeout(() => document.getElementById('catNameInput').focus(), 120);
+}
+function closeCatModal() { document.getElementById('catModal').classList.remove('show'); }
+
+function buildModalUI() {
+  const grid = document.getElementById('emojiGrid');
+  grid.innerHTML = '';
+  EMOJIS.forEach(em => {
+    const el = document.createElement('div');
+    el.className = 'emoji-opt' + (em === selectedEmoji ? ' selected' : '');
+    el.textContent = em;
+    el.onclick = () => {
+      selectedEmoji = em;
+      grid.querySelectorAll('.emoji-opt').forEach(e => e.classList.remove('selected'));
+      el.classList.add('selected');
+    };
+    grid.appendChild(el);
+  });
+  const cw = document.getElementById('modalColors');
+  cw.innerHTML = '';
+  PALETTE.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'modal-color-swatch' + (c === selectedColor ? ' selected' : '');
+    el.style.background = c;
+    el.onclick = () => {
+      selectedColor = c;
+      cw.querySelectorAll('.modal-color-swatch').forEach(e => e.classList.remove('selected'));
+      el.classList.add('selected');
+    };
+    cw.appendChild(el);
+  });
+}
+
+function confirmAddCat() {
+  const name = document.getElementById('catNameInput').value.trim();
+  if (!name) { document.getElementById('catNameInput').focus(); return; }
+  mutate(() => data.push({ id: uid(), name: selectedEmoji + ' ' + name, color: selectedColor, open: true, rows: [] }));
+  closeCatModal();
+  showToast('카테고리 추가 완료 ✓');
+}
+
+// ══════════════════════════════════════
+//  Delete Modal
+// ══════════════════════════════════════
+function openDelModal(catId, catName) {
+  pendingDeleteId = catId;
+  document.getElementById('delCatName').textContent = catName;
+  document.getElementById('delModal').classList.add('show');
+}
+function closeDelModal() {
+  document.getElementById('delModal').classList.remove('show');
+  pendingDeleteId = null;
+}
+function confirmDeleteCat() {
+  if (!pendingDeleteId) return;
+  mutate(() => { data = data.filter(c => c.id !== pendingDeleteId); });
+  closeDelModal();
+  showToast('삭제됐어요. 되돌리기로 복구 가능합니다.');
+}
+
+// ══════════════════════════════════════
+//  Save / Export
+// ══════════════════════════════════════
+async function saveData() {
+  localStorage.setItem('acct_v4', JSON.stringify(data));
+  if (!fbUid) { showToast('저장 완료 💾 (로컬)'); return; }
+  setSyncStatus('syncing');
+  try {
+    const now = new Date().toISOString();
+    await DOC().set({ data: JSON.stringify(data), updatedAt: now });
+    localStorage.setItem('acct_updated', now);
+    setSyncStatus('saved');
+    showToast('저장 완료 ☁️');
+    setTimeout(() => setSyncStatus('saved'), 2000);
+  } catch(e) {
+    setSyncStatus('error');
+    showToast('⚠️ 클라우드 저장 실패 — 로컬에는 저장됐어요');
+  }
+}
+function exportData() {
+  const wb = XLSX.utils.book_new();
+
+  // ── 전체 요약 시트 ──
+  const summaryRows = [
+    ['카테고리', '항목 수'],
+  ];
+  data.forEach(cat => summaryRows.push([cat.name, cat.rows.length]));
+  summaryRows.push([]);
+  summaryRows.push(['내보내기 일시', new Date().toLocaleString('ko-KR')]);
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+  wsSummary['!cols'] = [{wch: 30}, {wch: 10}];
+  XLSX.utils.book_append_sheet(wb, wsSummary, '📋 전체요약');
+
+  // ── 카테고리별 시트 ──
+  data.forEach(cat => {
+    const headers = ['서비스명', '링크', '아이디 / 이메일', '비밀번호 힌트', '메모'];
+    const rows = [headers];
+
+    cat.rows.forEach(row => {
+      rows.push([
+        row.name  || '',
+        row.url   || '',
+        row.id_   || '',
+        row.pw    || '',
+        row.memo  || '',
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // 컬럼 너비 설정
+    ws['!cols'] = [
+      {wch: 20},  // 서비스명
+      {wch: 35},  // 링크
+      {wch: 28},  // 아이디
+      {wch: 22},  // 비밀번호 힌트
+      {wch: 28},  // 메모
+    ];
+
+    // 링크 셀에 하이퍼링크 적용
+    cat.rows.forEach((row, ri) => {
+      if (!row.url) return;
+      const cellAddr = XLSX.utils.encode_cell({r: ri + 1, c: 1}); // B열, 헤더 다음 행
+      if (ws[cellAddr]) {
+        ws[cellAddr].l = { Target: row.url, Tooltip: row.url };
+      }
+    });
+
+    // 시트 이름은 32자 이내, 특수문자 제거
+    const sheetName = cat.name.replace(/[\\\/\?\*\[\]:]/g, '').slice(0, 31);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  const filename = '계정관리_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+  XLSX.writeFile(wb, filename);
+  showToast('엑셀 파일로 내보냈어요 📊');
+}
+
+// ══════════════════════════════════════
+//  JSON Export / Import
+// ══════════════════════════════════════
+function exportJsonData() {
+  const json = JSON.stringify(data, null, 2);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([json], {type:'application/json'}));
+  a.download = '계정관리_백업_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  showToast('JSON 백업 파일 저장 완료 📦');
+}
+
+function triggerImport() {
+  document.getElementById('importFileInput').value = '';
+  document.getElementById('importFileInput').click();
+}
+
+function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const parsed = JSON.parse(ev.target.result);
+      // validate: must be array with id/name/rows
+      if (!Array.isArray(parsed) || !parsed.every(c => c.id && c.name && Array.isArray(c.rows))) {
+        throw new Error('invalid');
+      }
+      // show confirm modal
+      document.getElementById('importFileName').textContent = file.name;
+      document.getElementById('importCatCount').textContent = parsed.length + '개 카테고리';
+      const total = parsed.reduce((s,c) => s + c.rows.length, 0);
+      document.getElementById('importItemCount').textContent = total + '개 항목';
+      pendingImportData = parsed;
+      document.getElementById('importModal').classList.add('show');
+    } catch {
+      showToast('⚠️ 올바른 백업 파일이 아닙니다.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+let pendingImportData = null;
+function confirmImport() {
+  if (!pendingImportData) return;
+  mutate(() => { data = pendingImportData; });
+  pendingImportData = null;
+  document.getElementById('importModal').classList.remove('show');
+  showToast('데이터를 불러왔어요 ✓');
+}
+function closeImportModal() {
+  pendingImportData = null;
+  document.getElementById('importModal').classList.remove('show');
+}
+
+// ══════════════════════════════════════
+//  Copy Flash
+// ══════════════════════════════════════
+let flashEl = null;
+function showCopyFlash(x, y, msg) {
+  if (!flashEl) {
+    flashEl = document.createElement('div');
+    flashEl.className = 'copy-flash';
+    document.body.appendChild(flashEl);
+  }
+  flashEl.textContent = msg;
+  flashEl.style.left = (x + 12) + 'px';
+  flashEl.style.top  = (y - 28) + 'px';
+  flashEl.classList.add('show');
+  clearTimeout(flashEl._t);
+  flashEl._t = setTimeout(() => flashEl.classList.remove('show'), 1200);
+}
+
+// ══════════════════════════════════════
+//  Toast
+// ══════════════════════════════════════
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+// ══════════════════════════════════════
+//  Keyboard
+// ══════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey||e.metaKey) && e.key==='s') { e.preventDefault(); saveData(); }
+  if ((e.ctrlKey||e.metaKey) && e.key==='z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  if ((e.ctrlKey||e.metaKey) && (e.key==='y' || (e.key==='z' && e.shiftKey))) { e.preventDefault(); redo(); }
+});
+document.getElementById('catModal').addEventListener('click', e => { if (e.target===e.currentTarget) closeCatModal(); });
+document.getElementById('delModal').addEventListener('click', e => { if (e.target===e.currentTarget) closeDelModal(); });
+document.getElementById('setPwModal').addEventListener('click', e => { if (e.target===e.currentTarget) closeSetPwModal(); });
+document.getElementById('importModal').addEventListener('click', e => { if (e.target===e.currentTarget) closeImportModal(); });
+document.getElementById('linkModal').addEventListener('click', e => { if (e.target===e.currentTarget) closeLinkModal(); });
+
+// ══════════════════════════════════════
+//  Password / Lock
+// ══════════════════════════════════════
+const PW_KEY = 'acct_pw_hash';
+const DEFAULT_PW = '1234';
+
+// Simple hash (SHA-256 via SubtleCrypto)
+async function hashPw(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function initLock() {
+  const stored = localStorage.getItem(PW_KEY);
+  if (!stored) {
+    // First run: set default password silently
+    localStorage.setItem(PW_KEY, await hashPw(DEFAULT_PW));
+    document.getElementById('lockSubText').textContent = '기본 비밀번호: 1234';
+  }
+  // Always show lock screen on load
+  document.getElementById('lockScreen').classList.remove('hidden');
+  setTimeout(() => document.getElementById('lockInput').focus(), 100);
+}
+
+async function submitLock() {
+  const input = document.getElementById('lockInput');
+  const val   = input.value;
+  if (!val) { shakeInput(); return; }
+
+  const hash   = await hashPw(val);
+  const stored = localStorage.getItem(PW_KEY);
+
+  if (hash === stored) {
+    document.getElementById('lockScreen').classList.add('hidden');
+    document.getElementById('lockError').textContent = '';
+    input.value = '';
+    // 잠금 해제 시 Firebase 동기화 시작
+    if (!fbSynced) initFirebase(FIXED_DOC_ID);
+  } else {
+    shakeInput();
+    document.getElementById('lockError').textContent = '비밀번호가 틀렸습니다.';
+    setTimeout(() => { document.getElementById('lockError').textContent = ''; }, 2000);
+    input.value = '';
+    input.focus();
+  }
+}
+
+function shakeInput() {
+  const inp = document.getElementById('lockInput');
+  inp.classList.remove('error');
+  void inp.offsetWidth; // reflow to restart animation
+  inp.classList.add('error');
+  setTimeout(() => inp.classList.remove('error'), 400);
+}
+
+function toggleLockEye() {
+  const inp  = document.getElementById('lockInput');
+  const icon = document.getElementById('lockEyeIcon');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    icon.innerHTML = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>`;
+  } else {
+    inp.type = 'password';
+    icon.innerHTML = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+  }
+}
+
+function lockApp() {
+  document.getElementById('lockScreen').classList.remove('hidden');
+  document.getElementById('lockInput').value = '';
+  document.getElementById('lockError').textContent = '';
+  document.getElementById('lockSubText').textContent = '비밀번호를 입력해 주세요';
+  setTimeout(() => document.getElementById('lockInput').focus(), 100);
+}
+
+let setPwFromLock = false;
+function showSetPassword(fromHeader = true) {
+  setPwFromLock = !fromHeader;
+  document.getElementById('newPw1').value = '';
+  document.getElementById('newPw2').value = '';
+  document.getElementById('setPwError').textContent = '';
+  // hide cancel btn if no password is set yet (first time from lock screen)
+  document.getElementById('setPwCancelBtn').style.display = fromHeader ? '' : '';
+  document.getElementById('setPwModal').classList.add('show');
+  setTimeout(() => document.getElementById('newPw1').focus(), 120);
+}
+function closeSetPwModal() {
+  document.getElementById('setPwModal').classList.remove('show');
+}
+async function confirmSetPassword() {
+  const p1 = document.getElementById('newPw1').value;
+  const p2 = document.getElementById('newPw2').value;
+  const err = document.getElementById('setPwError');
+  if (!p1) { err.textContent = '비밀번호를 입력해 주세요.'; return; }
+  if (p1 !== p2) { err.textContent = '비밀번호가 일치하지 않습니다.'; return; }
+  if (p1.length < 4) { err.textContent = '4자 이상 입력해 주세요.'; return; }
+  localStorage.setItem(PW_KEY, await hashPw(p1));
+  closeSetPwModal();
+  if (setPwFromLock) {
+    // auto-unlock after setting password from lock screen
+    document.getElementById('lockScreen').classList.add('hidden');
+  }
+  showToast('비밀번호가 저장됐어요 🔑');
+}
+
+// ══════════════════════════════════════
+//  Firebase 구글 로그인 & 데이터 동기화
+// ══════════════════════════════════════
+
+// 저장된 구글 uid 확인
+// ══════════════════════════════════════
+//  Firebase 동기화 — 비밀번호 기반
+//  같은 비밀번호 = 같은 문서 = 자동 동기화
+// ══════════════════════════════════════
+let realtimeListener = null;  // 실시간 리스너 참조
+
+async function initFirebase(appPwHash) {
+  pwHash = appPwHash;
+  setSyncStatus('syncing');
+  try {
+    // 익명 로그인
+    if (!auth.currentUser) {
+      await auth.signInAnonymously();
+    }
+    fbUid = auth.currentUser.uid;
+
+    // 기존 리스너 제거
+    if (realtimeListener) { realtimeListener(); realtimeListener = null; }
+
+    // 첫 데이터 로드 (동기식으로 먼저 처리)
+    const snap = await DOC().get();
+    if (snap.exists) {
+      const remoteTime = new Date(snap.data().updatedAt || 0);
+      const localTime  = new Date(localStorage.getItem('acct_updated') || 0);
+      if (remoteTime > localTime) {
+        applyRemoteData(snap.data(), false);
+      }
+    } else {
+      await saveData();
+    }
+    setSyncStatus('saved');
+    fbSynced = true;
+
+    // ── 실시간 리스너 등록 ──
+    // 다른 기기에서 저장하면 자동으로 반영
+    realtimeListener = DOC().onSnapshot(snap => {
+      if (!snap.exists) return;
+      const remoteTime = new Date(snap.data().updatedAt || 0);
+      const localTime  = new Date(localStorage.getItem('acct_updated') || 0);
+      // 원격이 더 최신이고 내가 방금 저장한 게 아닐 때만 반영
+      if (remoteTime > localTime) {
+        applyRemoteData(snap.data(), true);
+      }
+      setSyncStatus('saved');
+    }, err => {
+      setSyncStatus('offline');
+      console.warn('Realtime listener error:', err);
+    });
+
+  } catch(e) {
+    setSyncStatus('offline');
+    console.warn('Firebase sync failed:', e);
+  }
+}
+
+function applyRemoteData(snapData, showNotice) {
+  try {
+    const remote = JSON.parse(snapData.data);
+    data = remote;
+    localStorage.setItem('acct_v4', JSON.stringify(data));
+    localStorage.setItem('acct_updated', snapData.updatedAt);
+    // 다른 기기 변경 시: history에 추가(초기화 X) → 되돌리기 가능
+    if (showNotice) {
+      history.push(JSON.stringify(data));
+      if (history.length > MAX_HISTORY) history.shift();
+      future = [];
+    } else {
+      // 첫 로드 시에만 초기화
+      history = [JSON.stringify(data)];
+      future  = [];
+    }
+    updateUndoButtons();
+    render();
+    if (showNotice) showToast('🔄 다른 기기에서 변경됐어요!');
+  } catch(e) {
+    console.warn('applyRemoteData error:', e);
+  }
+}
+
+// ── Init ──
+// 고정 문서 ID — 모든 기기가 항상 같은 Firebase 문서 사용
+const FIXED_DOC_ID = '2d907c75aab224850b6b76d15e2fd471248edf715de8f79dc84c2d411f663f88';
+
+initLock().then(async () => {
+  render();
+  await initFirebase(FIXED_DOC_ID);
+});
+</script>
+</body>
+</html>
